@@ -9,8 +9,10 @@ module IIC_master
 
     input [7:0]  data_in,
     output reg [7:0] data_out,
-    output reg drdy,
-    output reg w_done,
+    // output reg drdy,
+    output reg byte_done,
+    output reg ack_check,
+    output reg ack_check_vd,
     output reg trans_done,
     output reg trans_err, // if ack no receive
     input start_pulse,
@@ -55,7 +57,6 @@ reg [2:0] next_state;
 reg trans_state;
 reg ctn_flag;// continue flag
 reg re_st_flag;//restart
-reg ack_check;
 reg first_ack;
 wire byte_last;
 assign byte_last = bit_cnt == 3'd0;
@@ -158,9 +159,18 @@ always @(posedge clk) begin
 end
 always @(posedge clk) begin
     case(state)
-    IDLE:      ack_check <=1'b0;
-    ACK:       ack_check <= (trans_state==RECV)&rx_trig&(~SDA) ? 1'b1 : ack_check;
-    default :  ack_check <= 1'b0;
+    IDLE: begin 
+        ack_check    <=1'b0; 
+        ack_check_vd <=  1'b0;
+    end
+    ACK: begin
+        ack_check    <= (trans_state==RECV)&rx_trig&(~SDA) ? 1'b1 : ack_check;
+        ack_check_vd <= (trans_state==RECV)&rx_trig ? 1'b1 : ack_check;
+    end       
+    default : begin
+        ack_check    <= 1'b0;
+        ack_check_vd <=  1'b0;
+    end 
     endcase
 end
 //transmission direction flag
@@ -224,8 +234,14 @@ always @(posedge clk ) begin
         sda_out    <= 1'b1;
     end                          // SDA pin = z
     START : begin
-        sda_out_en <= rx_trig ? 1'b1 : sda_out_en;
-        sda_out    <= rx_trig ? 1'b0 : sda_out;
+        if(tx_trig) begin
+           sda_out_en <= 1'b1; 
+           sda_out    <= 1'b1; 
+        end
+        else if(rx_trig) begin  
+            sda_out_en <= 1'b1; 
+            sda_out    <= 1'b0; 
+        end
     end
     DATA: begin
         case(trans_state)
@@ -273,45 +289,43 @@ end
 
 always @(posedge clk or negedge rstn) begin
     if(~rstn) begin
-        w_done    <= 1'b0;
-        trans_err <= 1'b0;
-        drdy      <= 1'b0;
-        trans_done<= 1'b0; 
+        byte_done    <= 1'b0;
+        trans_err    <= 1'b0;
+        // drdy      <= 1'b0;
+        trans_done   <= 1'b0; 
     end
     else begin
         case(state)
         IDLE: begin
-               w_done    <= 1'b0;
+               byte_done    <= 1'b0;
                trans_err <= 1'b0;
-               drdy      <= 1'b0;
+            //    drdy      <= 1'b0;
                trans_done<= 1'b0; 
         end
         DATA : begin
             trans_done <= 1'b0;
             trans_err  <= trans_err;
-            case(trans_state)
-            TRANS : w_done <= byte_last&sta_trig ? 1'b1 : w_done;
-            RECV  : drdy   <= byte_last&sta_trig ? 1'b1 : drdy;
-            endcase
+            byte_done <= byte_last&sta_trig ? 1'b1 : byte_done;
+            // RECV  : drdy   <= byte_last&sta_trig ? 1'b1 : drdy;
         end
         ACK : begin
-            w_done    <= 1'b0;
-            drdy      <= 1'b0;
+            byte_done    <= 1'b0;
+            // drdy      <= 1'b0;
             trans_done<= 1'b0;
             if(trans_state==RECV) begin
                 trans_err <= sta_trig&ack_check ? 1'b0 :  1'b1;
             end
         end
         STOP: begin
-            w_done     <= 1'b0;
-            drdy       <= 1'b0;
+            byte_done     <= 1'b0;
+            // drdy       <= 1'b0;
             trans_done <= sta_trig ? 1'b1 : 1'b0;
             trans_err  <= trans_err;
         end
         default: begin
-            w_done    <= 1'b0;
+            byte_done    <= 1'b0;
             trans_err <= 1'b0;
-            drdy      <= 1'b0;
+            // drdy      <= 1'b0;
             trans_done<= 1'b0; 
         end    
         endcase
@@ -319,4 +333,4 @@ always @(posedge clk or negedge rstn) begin
 end
 
 
-endmodule  
+endmodule
