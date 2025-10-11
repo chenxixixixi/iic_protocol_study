@@ -4,22 +4,21 @@ module IIC_master
     parameter FSCL = 100e3
 ) 
 (
-    output reg SCL,
-    inout  SDA,
+    output reg       SCL,
+    inout            SDA,
 
-    input [7:0]  data_in,
+    input [7:0]      data_in,
     output reg [7:0] data_out,
-    // output reg drdy,
-    output reg byte_done,
-    output reg ack_check,
-    output reg ack_check_vd,
-    output reg trans_done,
-    output reg trans_err, // if ack no receive
-    input start_pulse,
-    input continue_pulse,
+    output reg       byte_done,
+    output reg       ack_check,
+    output reg       ack_check_vd,
+    output reg       trans_done,
+    output reg       trans_err, // if ack no receive
+    input            start_flag,
+    input            continue_flag,
 
-    input clk,
-    input rstn
+    input            clk,
+    input            rstn
     
 
 );
@@ -34,7 +33,7 @@ localparam STOP  = 3'd4;
 
 localparam TRANS = 1'b0;
 localparam RECV  = 1'b1;
-localparam CNT_MAX = FCLK/FSCL/2;
+localparam CNT_MAX = FCLK/(FSCL*2);
 
 reg sda_out;
 reg rw_flag; // 1:read 0:wirte
@@ -55,8 +54,6 @@ reg [2:0] state;
 reg [2:0] bit_cnt;
 reg [2:0] next_state;
 reg trans_state;
-reg ctn_flag;// continue flag
-reg re_st_flag;//restart
 reg first_ack;
 wire byte_last;
 assign byte_last = bit_cnt == 3'd0;
@@ -87,7 +84,7 @@ end
 always @(*) begin
     case(state)
     IDLE : begin
-        if(start_pulse) begin
+        if(start_flag) begin
             next_state = START;
         end
         else begin
@@ -104,13 +101,13 @@ always @(*) begin
         case(trans_state)
         TRANS : begin
             if(sta_trig) begin
-                next_state = ctn_flag ? DATA : STOP; 
+                next_state = continue_flag ? DATA : STOP; 
             end
         end
         RECV : begin
             if(sta_trig) begin
                 if(ack_check) begin
-                    next_state = re_st_flag ? START : (ctn_flag ? DATA : STOP) ;
+                    next_state = start_flag ? START : (continue_flag ? DATA : STOP) ;
                 end
                 else begin
                     next_state = STOP;
@@ -141,13 +138,7 @@ always @(posedge clk) begin
     DATA : rw_flag <= byte_last&sta_trig ? sda_out : rw_flag;
     endcase
 end
-always @(posedge clk ) begin
-    case(state)
-    IDLE : re_st_flag <= 1'b0;
-    START: re_st_flag <= 1'b0;
-    ACK  : re_st_flag <= (trans_state==RECV)&start_pulse ?  1'b1 : re_st_flag;
-    endcase
-end
+
 always @(posedge clk) begin
     case(state)
     IDLE : first_ack <= 1'b1;
@@ -160,15 +151,15 @@ end
 always @(posedge clk) begin
     case(state)
     IDLE: begin 
-        ack_check    <=1'b0; 
+        ack_check    <=  1'b0; 
         ack_check_vd <=  1'b0;
     end
     ACK: begin
         ack_check    <= (trans_state==RECV)&rx_trig&(~SDA) ? 1'b1 : ack_check;
-        ack_check_vd <= (trans_state==RECV)&rx_trig ? 1'b1 : ack_check;
+        ack_check_vd <= (trans_state==RECV)&rx_trig        ? 1'b1 : ack_check_vd;
     end       
     default : begin
-        ack_check    <= 1'b0;
+        ack_check    <=  1'b0;
         ack_check_vd <=  1'b0;
     end 
     endcase
@@ -203,19 +194,6 @@ always @(posedge clk) begin
     default : bit_cnt <= 3'd7;
     endcase
 end
-always @(posedge clk) begin
-    case(state)
-    ACK: begin
-        ctn_flag   <= continue_pulse ? 1'b1 : ctn_flag;
-        re_st_flag <= start_pulse    ? 1'b1 : re_st_flag;
-    end
-    default : begin
-        ctn_flag   <= 1'b0;
-        re_st_flag <= 1'b0;
-    end
-    endcase
-end
-
 
 // SCL output
 always @(posedge clk ) begin
@@ -266,10 +244,10 @@ always @(posedge clk ) begin
         if(trans_state==TRANS) begin
             if(tx_trig) begin
                 sda_out_en <=1'b1;
-                sda_out    <= ctn_flag ?   1'b0 : 1'b1;
+                sda_out    <= continue_flag ?   1'b0 : 1'b1;
             end
             else if(sta_trig) begin
-                sda_out_en <=  ctn_flag ?  1'b0 : sda_out_en;
+                sda_out_en <=  continue_flag ?  1'b0 : sda_out_en;
             end
         end
     end
@@ -291,22 +269,20 @@ always @(posedge clk or negedge rstn) begin
     if(~rstn) begin
         byte_done    <= 1'b0;
         trans_err    <= 1'b0;
-        // drdy      <= 1'b0;
         trans_done   <= 1'b0; 
     end
     else begin
         case(state)
         IDLE: begin
                byte_done    <= 1'b0;
-               trans_err <= 1'b0;
-            //    drdy      <= 1'b0;
-               trans_done<= 1'b0; 
+               trans_err    <= 1'b0;
+               trans_done   <= 1'b0; 
         end
         DATA : begin
-            trans_done <= 1'b0;
-            trans_err  <= trans_err;
-            byte_done <= byte_last&sta_trig ? 1'b1 : byte_done;
-            // RECV  : drdy   <= byte_last&sta_trig ? 1'b1 : drdy;
+            trans_done      <= 1'b0;
+            trans_err       <= trans_err;
+            byte_done       <= byte_last&sta_trig ? 1'b1 : byte_done;
+
         end
         ACK : begin
             byte_done    <= 1'b0;
@@ -318,15 +294,13 @@ always @(posedge clk or negedge rstn) begin
         end
         STOP: begin
             byte_done     <= 1'b0;
-            // drdy       <= 1'b0;
-            trans_done <= sta_trig ? 1'b1 : 1'b0;
-            trans_err  <= trans_err;
+            trans_done    <= sta_trig ? 1'b1 : 1'b0;
+            trans_err     <= trans_err;
         end
         default: begin
             byte_done    <= 1'b0;
-            trans_err <= 1'b0;
-            // drdy      <= 1'b0;
-            trans_done<= 1'b0; 
+            trans_err    <= 1'b0;
+            trans_done   <= 1'b0; 
         end    
         endcase
     end 
