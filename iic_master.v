@@ -228,13 +228,13 @@ always @(posedge clk ) begin
                 sda_out_en <= 1'b1;
                 sda_out    <= data_in[bit_cnt];
             end
-            else if(sta_trig) begin
+            else if(sta_trig&byte_last) begin
                 sda_out_en <= 1'b0;
             end
         end
         RECV: begin
             if(rx_trig) begin
-                sda_out_en        <=  1'b0;
+                // sda_out_en        <=  1'b0;
                 data_out[bit_cnt] <=  SDA;
             end
         end
