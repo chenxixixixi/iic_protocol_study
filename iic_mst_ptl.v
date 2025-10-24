@@ -1,4 +1,4 @@
-module IIC_master
+module iic_mst_ptl
 #(
     parameter FCLK = 200e6,
     parameter FSCL = 100e3
