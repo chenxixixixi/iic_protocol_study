@@ -1,12 +1,12 @@
 module iic_mst_ctrl (
 // application  ports
-    input [6:0]      addr_slv,
-    input [7:0]      addr_reg,
-    input            rwn,
-    input [4:0]      rw_len,
-    input            mst_start_pulse,
+    input [6:0]      app_addr_slv,
+    input [7:0]      app_addr_reg,
+    input            app_rwn,
+    input [4:0]      app_rw_len,
+    input            app_start_pulse,
     output reg       mst_trans_done,
-    input [7:0]      mst_wdata,
+    input [7:0]      app_wdata,
     output           mst_wdy,
     output reg [7:0] mst_rdata,
     output reg       mst_rdy,
@@ -65,7 +65,7 @@ always @(posedge clk or negedge rstn) begin
 end
 always @(*) begin
     case(state)
-    IDLE      :     next_state = mst_start_pulse ? ADDR_SLV : IDLE;
+    IDLE      :     next_state = app_start_pulse ? ADDR_SLV : IDLE;
     ADDR_SLV  :     next_state = IIC_byte_done ? SLV_CHECK  : ADDR_SLV  ;
     SLV_CHECK : begin
         if(IIC_ack_check_valid) begin
@@ -133,9 +133,9 @@ always @(posedge clk) begin
         reg_addr_done       <= 1'b0;        
     end
     ADDR_SLV: begin
-        rw_flag             <= rwn;
+        rw_flag             <= app_rwn;
         IIC_start           <= reg_addr_done ? IIC_start : 1'b1;
-        re_start_flag       <= reg_addr_done ? 1'b0 : rwn ;                   
+        re_start_flag       <= reg_addr_done ? 1'b0 : app_rwn ;                   
         reg_addr_done       <= 1'b0;
     end
     SLV_CHECK: IIC_start    <= 1'b0;
@@ -160,7 +160,7 @@ always @(posedge clk) begin
         rw_done         <= 1'b0;
     end
     ADDR_SLV: begin
-        rw_cnt          <= rw_len;
+        rw_cnt          <= app_rw_len;
         IIC_continue_flag   <= 1'b1;
     end
     DATA: begin
@@ -187,11 +187,11 @@ always @(posedge clk) begin
         wdy_flag  <= 1'b0;
     end
     ADDR_SLV: begin
-        IIC_wdata <= reg_addr_done ?  {addr_slv,1'b1} : {addr_slv,1'b0};
+        IIC_wdata <= reg_addr_done ?  {app_addr_slv,1'b1} : {app_addr_slv,1'b0};
     end
     SLV_CHECK: ;
     ADDR_REG: begin
-        IIC_wdata <= {addr_reg,1'b0};
+        IIC_wdata <= {app_addr_reg,1'b0};
     end
     REG_CHECK: begin
         wdy_flag <= IIC_ack_check ? ~rw_flag : 1'b0; 
@@ -202,7 +202,7 @@ always @(posedge clk) begin
             mst_rdy   <= IIC_byte_done;
         end
         else begin
-            IIC_wdata <=  wdy_flag ? mst_wdata : IIC_wdata;
+            IIC_wdata <=  wdy_flag ? app_wdata : IIC_wdata;
             wdy_flag  <= 1'b0;
         end
     end
